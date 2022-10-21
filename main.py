@@ -10,30 +10,24 @@ from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
 from functools import wraps
 from flask import abort
 import os
+from flask_gravatar import Gravatar  # https://pythonhosted.org/Flask-Gravatar/
 
-from flask_gravatar import Gravatar  #https://pythonhosted.org/Flask-Gravatar/
-
-# SQLAlchemy - Relationships  - https://docs.sqlalchemy.org/en/13/orm/basic_relationships.html
-# from sqlalchemy import Table, Column, Integer, ForeignKey
-# from sqlalchemy.orm import relationship
-# from sqlalchemy.ext.declarative import declarative_base
-
-# Base = declarative_base()
+# Defining the list of user who have administrative control over the blog website.
+ADMIN_USER_EMAIL_LIST = ['seyed.amin.borghei@gmail.com']
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", 'rC9&hIRmww20&b8')
 ckeditor = CKEditor(app)
 Bootstrap(app)
 
 ##CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///blog.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 #  ------- Flask-Login ---------#
 login_manager = LoginManager()
 login_manager.init_app(app)
-
 
 # --- initialize with flask application --- #
 gravatar = Gravatar(app,
@@ -104,10 +98,11 @@ class Comment(db.Model):
 
 db.create_all()
 
+
 def admin_only(function):
     @wraps(function)
     def decorated_function(*args, **kwargs):
-        if current_user.id != 1:
+        if current_user.email not in ADMIN_USER_EMAIL_LIST:
             # If id is not 1 (the user is not the administrative user), abort with 403 error
             return abort(403)
         # Otherwise continue with the route function
@@ -119,7 +114,7 @@ def admin_only(function):
 @app.route('/')
 def get_all_posts():
     posts = BlogPost.query.all()
-    return render_template("index.html", all_posts=posts, current_user=current_user)
+    return render_template("index.html", all_posts=posts, current_user=current_user, admin_list=ADMIN_USER_EMAIL_LIST)
     # if current_user.is_authenticated:  # if user logged in to account
     #     current_user_id = current_user.get_id()
     #     user = User.query.filter_by(id=current_user_id).first()
@@ -143,17 +138,17 @@ def register():
                                                           method='pbkdf2:sha256',
                                                           salt_length=8)
         name = form.name.data
-        print(f"email:{email} ; Password: {password} ; Name: {name}")
+        # print(f"email:{email} ; Password: {password} ; Name: {name}")
         user = User.query.filter_by(email=email).first()
         if user:
             # User already exist in the database
-            print(f"User with email ({email}) already exist in the datebase, so it cannot be registered. Login to "
-                  f"your account")
+            # print(f"User with email ({email}) already exist in the datebase, so it cannot be registered. Login to "
+            #       f"your account")
             flash("You already signed up with the email. Log in instead.")
             return redirect(url_for('login'))
         else:
             # The user does not exist in the database, so it will be added to the database.
-            print(f"User with email ({email}) will be added to the database.")
+            # print(f"User with email ({email}) will be added to the database.")
             new_user = User(email=email,
                             name=name,
                             password=hash_and_salted_password
@@ -161,10 +156,10 @@ def register():
             db.session.add(new_user)
             db.session.commit()
             # login_user(new_user)
-            print(f"User with email ({email}) was added to the database.")
+            # print(f"User with email ({email}) was added to the database.")
             # This line will authenticate the user with Flask-Login
             login_user(new_user)
-            print("log in Sucessfully")
+            # print("log in Sucessfully")
             return redirect(url_for('get_all_posts'))
         # return "form was submitted."
     else:
@@ -181,11 +176,11 @@ def login():
         # return f"email: {email} Password = {password}"
         user = User.query.filter_by(email=email).first()
         if user:
-            print(f"User {email} exist in the database.")
+            # print(f"User {email} exist in the database.")
             hash_password_database = user.password
-            print(f"hashed password{hash_password_database}")
+            # print(f"hashed password{hash_password_database}")
             password_checking = check_password_hash(pwhash=hash_password_database, password=password)
-            print(f"password check: {password_checking}")
+            # print(f"password check: {password_checking}")
             if password_checking:
                 login_user(user)
                 # return redirect(url_for('secrets', name=user.name))
@@ -195,7 +190,7 @@ def login():
                 flash("Password incorrect, please try, again")
                 return redirect(url_for('login'))
         else:
-            print(f"User{email} does not exist in the database.")
+            # print(f"User{email} does not exist in the database.")
             flash("The email address does not exist in the database.")
             # flash("The email does not exist. Please try again.")
             return redirect(url_for('login'))
@@ -213,7 +208,7 @@ def logout():
 @app.route("/post/<int:post_id>", methods=["GET", "POST"])
 def show_post(post_id):
     requested_post = BlogPost.query.get(post_id)
-    print(requested_post.comments)
+    # print(requested_post.comments)
     # print(comments_for_post)
     comment_form = CommentForm()
     if comment_form.validate_on_submit():
@@ -221,15 +216,15 @@ def show_post(post_id):
         # check if the user logged in
         if current_user.is_authenticated:
             comment = comment_form.comment.data
-            print(comment)
+            # print(comment)
             new_comment = Comment(
-                text = comment,
-                post_id = post_id,
-                author_id = current_user.id
+                text=comment,
+                post_id=post_id,
+                author_id=current_user.id
             )
             db.session.add(new_comment)
             db.session.commit()
-            print("the comment was added to the database.")
+            # print("the comment was added to the database.")
             return redirect(url_for("show_post", post_id=post_id))
             # return f'user loged in: comment: {comment}'
         else:
@@ -239,7 +234,8 @@ def show_post(post_id):
     return render_template("post.html",
                            post=requested_post,
                            current_user=current_user,
-                           comment_form=comment_form)
+                           comment_form=comment_form,
+                           admin_list=ADMIN_USER_EMAIL_LIST)
 
 
 @app.route("/about")
